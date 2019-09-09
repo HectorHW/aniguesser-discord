@@ -5,15 +5,17 @@ import json
 from utils import Database, ChannelNotFoundException
 from downloader import download_file
 import sys
+import os
 
 class MyClient(discord.Client):
     def __init__(self, **options):
 
         super().__init__(**options)
         self.database = options['database']
+        self.mp3cache = options['mp3cache']
 
         self.configpath = options['configpath']
-        cfg = json.load(open(configpath))
+        cfg = json.load(open(self.configpath))
         self.guild_id = cfg['guild_id']
         self.rythm_channel_id = cfg['rythm_channel']
         self.bot_control_channel_id = cfg['bot_control_channel']
@@ -24,6 +26,7 @@ class MyClient(discord.Client):
         self.vchannel = None
 
         self.queue = []
+        self.np = None
 
     async def on_ready(self):
 
@@ -49,7 +52,7 @@ class MyClient(discord.Client):
     async def process_command(self, command):
         instr, *l = command.content[1:].split(' ', 1)
         if instr in ['get', 'list', 'add', 'del', 'clear', 'dump', 'die', 'dbreload',
-                     'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume']:
+                     'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume', 'np']:
             attr = getattr(self, 'command_'+instr)
             try:
                 await attr(command)
@@ -98,6 +101,7 @@ class MyClient(discord.Client):
         user = command.author.id
         if user==self.admin_id:
             self.database.store()
+            json.dump(self.mp3cache, open(self.mp3cache['path'], 'w'))
             await self.send_msg(f'stored database')
 
     async def command_die(self, command):
@@ -132,15 +136,14 @@ class MyClient(discord.Client):
         if re.match(r'>play \d+', command.content):
             idx = int(idx)
             command.content = f">play {self.database[idx]['link']}"
-            await self.send_msg(f"playing {self.database[idx]['name']}")
+            await self.send_msg(f"playing {self.database[idx]['name']} from database")
             await self.command_play(command)
-
         else:
-            await self.send_msg(f"downloading & playing url")
             await self.download_play(idx)
 
     async def command_skip(self, command):
-        await self.send_msg(f"!skip", channel=self.rythm_channel)
+        await self.command_stop(None)
+        await self.download_play(None)
 
     async def on_message(self, message:discord.message.Message):
         # don't respond to myself and outside of control channel
@@ -165,31 +168,71 @@ class MyClient(discord.Client):
         if self.vchannel is not None and self.vchannel.is_paused():
             self.vchannel.resume()
 
-    async def download_play(self, url):
-        if self.vchannel.is_playing():
-            return
-        if self.vchannel is None:
-            mock = lambda r: 0 # create mock message
-            mock.author = lambda r: 0
-            mock.author.id = self.admin_id
-            await self.command_vjoin(mock)
+    async def _precache(self, urls):
+        for item in urls:
+            await self.download_cached(item)
 
-        assert self.vchannel is not None
-        filename = download_file(url)
-        audio = discord.FFmpegPCMAudio(filename)
-        self.vchannel.play(audio)
-        while self.vchannel.is_playing():
-            await asyncio.sleep(1)
+    async def download_cached(self, url):
+        if url in self.mp3cache['data']:
+            print(f"using cached record for {url}")
+            return self.mp3cache['data'][url]
+        else:
+            filename = await download_file(url)
+            self.mp3cache['data'][url] = filename
+            return filename
+
+    async def command_np(self, command):
+        if self.np is None:
+            await self.send_msg('nothing is playing')
+        else:
+            await self.send_msg(f'playing {self.np}')
+
+
+    async def download_play(self, url=None):
+        if url is not None:
+            if self.vchannel is not None and self.vchannel.is_playing():
+
+                self.queue.append(url)
+                await self.send_msg(f'added {url} to the queue')
+                await self._precache([url])
+                return
+            else:
+                if self.vchannel is None:
+                    mock = lambda r: 0 # create mock message
+                    mock.author = lambda r: 0
+                    mock.author.id = self.admin_id
+                    await self.command_vjoin(mock)
+
+                assert self.vchannel is not None
+                filename = await self.download_cached(url)
+                audio = discord.FFmpegPCMAudio(filename)
+                self.vchannel.play(audio)
+                self.np = url
+                while self.vchannel.is_playing():
+                    await asyncio.sleep(1)
+                    #print(1)
+                #print(2)
+        self.np = None
+        if self.queue:
+            self.np = self.queue.pop()
+            await self.download_play(self.np)
+
 
 
 
 if __name__ == '__main__':
     configpath = './bot.json'
     data = './data.csv'
+    mp3cache = './cache.json'
+    if not os.path.exists(mp3cache):
+        mp3cache = { "path":mp3cache, "data":{}}
+    else:
+        mp3cache = json.load(open(mp3cache))
     database = Database(database_path=data)
     client = MyClient(
         configpath=configpath,
-        database=database
+        database=database,
+        mp3cache=mp3cache
     )
     token = open('token.txt').read()
     client.run(token)
