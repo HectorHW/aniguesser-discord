@@ -80,7 +80,6 @@ class MyClient(discord.Client):
 
         rows = self.database.sample(shuffle=True, N=number)
         self.queue += list(map(lambda r: r['link'], rows))
-        await self._ca
         self.broadcast_after = True
         self.verbose = False
         self.timelimit = time
