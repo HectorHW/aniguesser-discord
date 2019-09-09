@@ -29,6 +29,12 @@ class MyClient(discord.Client):
         self.queue = []
         self.np = None
 
+        self.commands = ['get', 'list', 'add', 'del', 'clear', 'dump', 'die', 'dbreload',
+                         'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume', 'np',
+                         'queue', 'clear_queue', 'dbpick', 'challenge', 'reset_state', 'help']
+
+        self.command_reset_state(None)
+
     async def on_ready(self):
 
         print('Logged as', self.user)
@@ -52,9 +58,7 @@ class MyClient(discord.Client):
 
     async def process_command(self, command):
         instr, *l = command.content[1:].split(' ', 1)
-        if instr in ['get', 'list', 'add', 'del', 'clear', 'dump', 'die', 'dbreload',
-                     'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume', 'np',
-                     'queue', 'clear_queue', 'dbpick']:
+        if instr in self.commands:
             attr = getattr(self, 'command_'+instr)
             try:
                 await attr(command)
@@ -62,6 +66,40 @@ class MyClient(discord.Client):
             except Exception as e:
                 await self.send_msg(str(e))
                 raise e
+
+
+
+    async def command_challenge(self, command): #>challenge t=15 n=25
+        """
+        make guess the anime challenge out of random samples from database
+        params: t - time, n - number of titles
+        example: >challenge t=15 n=25
+        """
+        time = int(re.search('t=(\d+)', command.content).group(1))
+        number = int(re.search('n=(\d+)', command.content).group(1))
+
+        rows = self.database.sample(shuffle=True, N=number)
+        self.queue += list(map(lambda r: r['link'], rows))
+        await self._ca
+        self.broadcast_after = True
+        self.verbose = False
+        self.timelimit = time
+        await self.download_play(None)
+
+    async def command_help(self, message):
+        """
+
+        possible commands: list, add, del, clear, dump, die, dbrealod, play, skip, stop, pause, resume, np, queue, clear_queue, challenge, reset_state
+        """
+        if message.content.lower()=='>help':
+            await self.send_msg(self.command_help.__doc__)
+        else:
+            instr = message.content.split(' ', 1)[-1]
+            if instr not in self.commands:
+                await self.send_msg(f'excuse me wtf is {instr}')
+                return
+            attr = getattr(self, 'command_'+instr)
+            await self.send_msg(attr.__doc__)
 
 
 
@@ -133,6 +171,10 @@ class MyClient(discord.Client):
             await self.vchannel.disconnect()
 
     async def command_play(self, command): # >play N | play <url>
+        """
+        >play N | play <url>
+        play url or N'th record from database
+        """
         if self.vchannel is None:
             await self.command_vjoin(command)
         idx = command.content.split(' ', 1)[-1]
@@ -140,12 +182,15 @@ class MyClient(discord.Client):
         if re.match(r'>play -?\d+', command.content):
             idx = int(idx) - 1 # db is indiced from 1 by users
             command.content = f">play {self.database[idx]['link']}"
-            await self.send_msg(f"playing {self.database[idx]['name']} from database")
+            await self.send_msg(f"playing {self.database[idx]['name']} from database") if self.verbose else None
             await self.command_play(command)
         else:
             await self.download_play(idx)
 
     async def command_skip(self, command):
+        """
+        skips to next track
+        """
         await self.command_stop(None)
         await self.download_play(None)
 
@@ -161,16 +206,25 @@ class MyClient(discord.Client):
             await self.process_command(message)
 
     async def command_queue(self, command):
+        """
+        display queue
+        """
         if self.queue:
             await self.send_msg(f'{self.queue}')
         else:
             await self.send_msg('queue is empty')
 
     async def command_queue_clear(self, command):
+        """
+        clear queue
+        """
         self.queue = []
         await self.send_msg('queue is now empty')
 
     async def command_dbpick(self, command): # >dbpick Evangelion
+        """
+        pick title from database by name
+        """
         query = command.content.split(' ', 1)[-1]
         for row in self.database:
             if row['name']==query:
@@ -182,20 +236,27 @@ class MyClient(discord.Client):
 
 
     async def command_stop(self, command):
+        """
+        DEPRECATED. use skip instead
+        break playing. type play to start again from next record in queue
+        """
         if self.vchannel is not None and self.vchannel.is_playing():
             self.vchannel.stop()
 
     async def command_pause(self, command):
+        """
+        pauses playing; also try resume
+        """
         if self.vchannel is not None and self.vchannel.is_playing():
             self.vchannel.pause()
 
     async def command_resume(self, command):
+        """
+        resume playing after pausing
+        """
         if self.vchannel is not None and self.vchannel.is_paused():
             self.vchannel.resume()
 
-    async def _precache(self, urls):
-        for item in urls:
-            await self.download_cached(item)
 
     async def download_cached(self, url):
         if url in self.mp3cache['data']:
@@ -204,13 +265,26 @@ class MyClient(discord.Client):
         else:
             filename = await download_file(url)
             self.mp3cache['data'][url] = filename
+            json.dump(self.mp3cache, open(self.mp3cache['path'], 'w'))
             return filename
 
     async def command_np(self, command):
+        """
+        display currently playing track
+        """
         if self.np is None:
             await self.send_msg('nothing is playing')
         else:
             await self.send_msg(f'playing {self.np}')
+
+    def command_reset_state(self, _):
+        """
+        execute after completing challenge
+        """
+        self.verbose = True
+        self.broadcast_after=False
+        self.timelimit = 7200
+        self.pause = False
 
 
     async def download_play(self, url=None):
@@ -218,8 +292,10 @@ class MyClient(discord.Client):
             if self.vchannel is not None and self.vchannel.is_playing():
 
                 self.queue.append(url)
-                await self.send_msg(f'added {url} to the queue')
-                await self._precache([url])
+                filename = await self.download_cached(url)
+                f = os.path.basename(filename).split(' --- ')[0]
+                await self.send_msg(f'added {f} to the queue') if self.verbose else None
+
                 return
             else:
                 if self.vchannel is None:
@@ -232,15 +308,25 @@ class MyClient(discord.Client):
                 filename = await self.download_cached(url)
                 audio = discord.FFmpegPCMAudio(filename)
                 self.vchannel.play(audio)
-                self.np = url
-                while self.vchannel.is_playing():
+                if self.pause:
+                    self.vchannel.pause()
+
+                self.np = os.path.basename(filename).split(' --- ')[0]
+                i = 0
+                if self.queue:
+                    await self.download_cached(self.queue[0])
+                while self.vchannel.is_playing() and i<=self.timelimit:
                     await asyncio.sleep(1)
-                    #print(1)
-                #print(2)
+                    if not self.vchannel.is_paused(): i+=1
+
+                if self.broadcast_after:
+                    await self.send_msg(self.np)
+                await self.command_stop(None)
+
         self.np = None
         if self.queue:
-            self.np = self.queue.pop()
-            await self.download_play(self.np)
+            next_url = self.queue.pop(0)
+            await self.download_play(next_url)
 
 
 
