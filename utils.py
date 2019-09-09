@@ -1,18 +1,22 @@
-import json
 import random
+import csv
 import numpy as np
 numbers = ['0️⃣🔟', '1⃣', '2⃣', '3⃣', '4⃣', '5⃣', '6⃣', '7⃣', '8⃣', '9⃣']
 true_false = ['❌', '✅']
 
-
+class ChannelNotFoundException(Exception):
+    pass
 
 class Database:
     def __init__(self, database_path=None):
         self.path = database_path
+        self.column_names = ['name', 'link']
         if database_path is None:
             self.data = []
         else:
-            lines = json.load(open(database_path))
+            with open(database_path) as f:
+                reader = csv.DictReader(f, fieldnames=self.column_names, delimiter='\t')
+                lines = list(reader)
 
             self.data = lines
 
@@ -29,13 +33,21 @@ class Database:
     def __getitem__(self, item):
         return self.data[item]
 
+    def __len__(self):
+        return len(self.data)
+
     def __str__(self):
         return '\n'.join(list(map(str, self.data)))
+
+    def __delitem__(self, key):
+        del self.data[key]
 
     def store(self, path=None):
         if path is None:
             path = self.path
-        json.dump(self.data, open(path, 'w'))
+        with open(path, 'w') as f:
+            writer = csv.DictWriter(f, fieldnames=self.column_names, delimiter='\t')
+            writer.writerows(self.data)
 
 
 
@@ -57,6 +69,4 @@ class GameState:
 
 if __name__ == '__main__':
     s = Database()
-    record = {"link":'https://www.youtube.com/watch?v=3dYjJ3kOGoY', "name":'Code Geass'}
-    s.add(record)
-    s.store('./data.json')
+    s.store('./data.csv')
