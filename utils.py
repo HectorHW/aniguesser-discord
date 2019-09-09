@@ -37,7 +37,11 @@ class Database:
         return len(self.data)
 
     def __str__(self):
-        return '\n'.join(list(map(str, self.data)))
+        # used in >list command
+        tmp = []
+        for i, row in enumerate(self.data):
+            tmp.append(f"{i+1}. {row['name']}")
+        return '\n'.join(tmp)
 
     def __delitem__(self, key):
         del self.data[key]

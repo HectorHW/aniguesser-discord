@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import asyncio
 import discord
 import re
@@ -52,7 +53,8 @@ class MyClient(discord.Client):
     async def process_command(self, command):
         instr, *l = command.content[1:].split(' ', 1)
         if instr in ['get', 'list', 'add', 'del', 'clear', 'dump', 'die', 'dbreload',
-                     'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume', 'np']:
+                     'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume', 'np',
+                     'queue', 'clear_queue', 'dbpick']:
             attr = getattr(self, 'command_'+instr)
             try:
                 await attr(command)
@@ -60,6 +62,8 @@ class MyClient(discord.Client):
             except Exception as e:
                 await self.send_msg(str(e))
                 raise e
+
+
 
     async def command_dbreload(self, command):
         user = command.author.id
@@ -133,8 +137,8 @@ class MyClient(discord.Client):
             await self.command_vjoin(command)
         idx = command.content.split(' ', 1)[-1]
 
-        if re.match(r'>play \d+', command.content):
-            idx = int(idx)
+        if re.match(r'>play -?\d+', command.content):
+            idx = int(idx) - 1 # db is indiced from 1 by users
             command.content = f">play {self.database[idx]['link']}"
             await self.send_msg(f"playing {self.database[idx]['name']} from database")
             await self.command_play(command)
@@ -155,6 +159,27 @@ class MyClient(discord.Client):
             await message.channel.send('лучший!')
         elif message.content.startswith('>'):
             await self.process_command(message)
+
+    async def command_queue(self, command):
+        if self.queue:
+            await self.send_msg(f'{self.queue}')
+        else:
+            await self.send_msg('queue is empty')
+
+    async def command_queue_clear(self, command):
+        self.queue = []
+        await self.send_msg('queue is now empty')
+
+    async def command_dbpick(self, command): # >dbpick Evangelion
+        query = command.content.split(' ', 1)[-1]
+        for row in self.database:
+            if row['name']==query:
+                await self.send_msg('found result!')
+                command.content = f">play {row['link']}"
+                await self.command_play(command)
+                return
+        await self.send_msg('sorry, nothing found')
+
 
     async def command_stop(self, command):
         if self.vchannel is not None and self.vchannel.is_playing():
