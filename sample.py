@@ -310,7 +310,7 @@ class MyClient(discord.Client):
                 if self.pause:
                     self.vchannel.pause()
 
-                self.np = os.path.basename(filename).split(' --- ')[0]
+                self.np = str(os.path.basename(filename)).split(' --- ')[0]
                 i = 0
                 if self.queue:
                     await self.download_cached(self.queue[0])
