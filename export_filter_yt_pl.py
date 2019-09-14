@@ -9,6 +9,6 @@ if __name__ == '__main__':
         return 'opening' in s['name'].lower() or re.search(r'\bop\b', s['name'].lower()+' ')
     records = list(filter(is_opening, records))
     print(records)
-    d = Database(data)
+    d = Database()
     d.data+=records
-    d.store()
+    d.store('./data.csv')

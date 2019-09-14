@@ -7,6 +7,8 @@ from utils import Database, ChannelNotFoundException
 from downloader import download_file
 import sys
 import os
+import config
+from search import search, format_results
 
 class MyClient(discord.Client):
     def __init__(self, **options):
@@ -14,13 +16,10 @@ class MyClient(discord.Client):
         super().__init__(**options)
         self.database = options['database']
         self.mp3cache = options['mp3cache']
-
-        self.configpath = options['configpath']
-        cfg = json.load(open(self.configpath))
-        self.guild_id = cfg['guild_id']
-        self.rythm_channel_id = cfg['rythm_channel']
-        self.bot_control_channel_id = cfg['bot_control_channel']
-        self.admin_id = cfg['admin_id']
+        self.guild_id = config.guild_id
+        self.rythm_channel_id = config.rythm_channel_id
+        self.bot_control_channel_id = config.bot_control_channel_id
+        self.admin_id = config.admin_user_id
         self.guild = None
         self.bot_control_channel = None
         self.rythm_channel = None
@@ -31,9 +30,11 @@ class MyClient(discord.Client):
 
         self.commands = ['get', 'list', 'add', 'del', 'clear', 'dump', 'die', 'dbreload',
                          'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume', 'np',
-                         'queue', 'clear_queue', 'dbpick', 'challenge', 'reset_state', 'help']
+                         'queue', 'clear_queue', 'dbpick', 'challenge', 'reset_state', 'help',
+                         'search']
 
         self.command_reset_state(None)
+        self.search_results = None
 
     async def on_ready(self):
 
@@ -66,6 +67,27 @@ class MyClient(discord.Client):
             except Exception as e:
                 await self.send_msg(str(e))
                 raise e
+
+    async def command_search(self, command):  # >search evangelion op
+        """
+        >search <query>
+        searches youtube for a video
+        """
+        query = command.content.split(' ', 1)[-1]
+        results = search(query, 10)
+        formatted = format_results(results)
+        await self.send_msg(formatted)
+        self.search_results = {'command':command, 'results':results}
+
+    async def play_select(self, message): #message is from the right person
+        if message.content.lower() in ['cancel', 'c']:
+            self.search_results = None
+            return
+        elif re.match(r'^\d+$', message.content):
+            n = int(message.content) - 1
+            url = self.search_results['results'][n]['link']
+            self.search_results = None
+            await self.download_play(url, announce=True)
 
 
 
@@ -203,6 +225,12 @@ class MyClient(discord.Client):
             await message.channel.send('лучший!')
         elif message.content.startswith('>'):
             await self.process_command(message)
+        elif self.search_results is not None \
+            and message.author==self.search_results['command'].author:
+            await self.play_select(message)
+
+
+
 
     async def command_queue(self, command):
         """
@@ -286,7 +314,7 @@ class MyClient(discord.Client):
         self.pause = False
 
 
-    async def download_play(self, url=None):
+    async def download_play(self, url=None, announce=False):
         if url is not None:
             if self.vchannel is not None and self.vchannel.is_playing():
 
@@ -311,6 +339,8 @@ class MyClient(discord.Client):
                     self.vchannel.pause()
 
                 self.np = str(os.path.basename(filename)).split(' --- ')[0]
+                await self.send_msg(f'playing {self.np}') if announce else None
+
                 i = 0
                 if self.queue:
                     await self.download_cached(self.queue[0])
