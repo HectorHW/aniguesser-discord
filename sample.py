@@ -31,7 +31,7 @@ class MyClient(discord.Client):
         self.commands = ['get', 'list', 'add', 'del', 'clear', 'dump', 'die', 'dbreload',
                          'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume', 'np',
                          'queue', 'clear_queue', 'dbpick', 'challenge', 'reset_state', 'help',
-                         'search']
+                         'search', 'playfile']
 
         self.command_reset_state(None)
         self.search_results = None
@@ -312,6 +312,30 @@ class MyClient(discord.Client):
         self.broadcast_after=False
         self.timelimit = 7200
         self.pause = False
+
+    async def command_playfile(self, command, announce=True):
+        filename = command.content.split(' ', 1)[-1]
+
+        user = command.author.id
+        if not user==self.admin_id:
+            return
+        if filename.split('.')[-1]!='mp3':
+            await  self.send_msg('unsupported file format')
+            return
+
+        if self.vchannel is None:
+            mock = lambda r: 0 # create mock message
+            mock.author = lambda r: 0
+            mock.author.id = self.admin_id
+            await self.command_vjoin(mock)
+        #assert self.vchannel is not None
+        audio = discord.FFmpegPCMAudio(filename)
+        self.vchannel.play(audio)
+        if self.pause:
+            self.vchannel.pause()
+        self.np = filename
+        await self.send_msg(f'playing {self.np}') if announce else None
+        self.np = None
 
 
     async def download_play(self, url=None, announce=False):
