@@ -105,3 +105,5 @@ venv.bak/
 /.idea/
 /token.txt
 tmpdir/
+/youtube_api_key.txt
+/tenor_token.txt

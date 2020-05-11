@@ -9,7 +9,8 @@ from downloader import download_file
 import sys
 import os
 import config
-from search import search, format_results
+from youtube_interaction import search_youtube
+from utils import format_results
 
 class MyClient(discord.Client):
     def __init__(self, **options):
@@ -72,7 +73,7 @@ class MyClient(discord.Client):
         searches youtube for a video
         """
         query = command.content.split(' ', 1)[-1]
-        results = search(query, 10)
+        results = search_youtube(query)
         formatted = format_results(results)
         await self.send_msg(formatted)
         self.search_results = results
@@ -134,7 +135,7 @@ class MyClient(discord.Client):
             self.queue.append((url, await download_file(url)))
             await self.send_msg(f'added {url} to the queue')
         except IndexError:
-            await self.send_msg("failed to download file. Try searching againg and chosing other option")
+            await self.send_msg("failed to download file. Try searching again and chosing other option")
 
 
 
@@ -215,7 +216,7 @@ class MyClient(discord.Client):
         elif self.search_results is not None and re.match("\d+", message.content):
             num = int(message.content)-1
             if 0<=num<len(self.search_results):
-                message.content = ">play "+"https://youtube.com"+self.search_results[num]['link']
+                message.content = ">play "+"https://youtube.com/watch?v="+self.search_results[num]['id']
                 await self.command_play(message)
             self.search_results = None
 
