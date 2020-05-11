@@ -110,6 +110,10 @@ class MyClient(discord.Client):
         if user==self.admin_id:
             await self.send_msg(f'Goodnight, sweet prince')
             await self.command_vleave(command)
+
+            with open('cache.json', 'w') as f:
+                f.write(json.dumps(self.mp3cache))
+
             await self.close()
             await sys.exit(0)
 
@@ -129,11 +133,18 @@ class MyClient(discord.Client):
         if user==self.admin_id and self.vchannel is not None:
             await self.vchannel.disconnect()
             
-            
+
     async def enqueue(self, url):
         try:
-            self.queue.append((url, await download_file(url)))
+            if url in self.mp3cache:
+                self.queue.append((url, self.mp3cache[url]))
+                await self.send_msg(f'added {url} to the queue')
+                return
+
+            filename = await download_file(url)
+            self.queue.append((url, filename))
             await self.send_msg(f'added {url} to the queue')
+            self.mp3cache[url] = filename
         except IndexError:
             await self.send_msg("failed to download file. Try searching again and chosing other option")
 
@@ -300,15 +311,11 @@ class MyClient(discord.Client):
 
 
 if __name__ == '__main__':
-    configpath = './bot.json'
-    data = './data.csv'
-    mp3cache = './cache.json'
-    if not os.path.exists(mp3cache):
-        mp3cache = { "path":mp3cache, "data":{}}
+    if not os.path.exists("cache.json"):
+        mp3cache = {}
     else:
-        mp3cache = json.load(open(mp3cache))
+        mp3cache = json.load(open("cache.json"))
     client = MyClient(
-        configpath=configpath,
         mp3cache=mp3cache
     )
     token = open('token.txt').read()
