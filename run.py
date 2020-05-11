@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import asyncio
+from get_gif import get_random_gif
 import discord
 import re
 import json
@@ -30,7 +31,7 @@ class MyClient(discord.Client):
         self.commands = ['clear_chat', 'dump', 'die',
                          'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume', 'np',
                          'queue', 'clear', 'help',
-                         'search', 'playfile', 's', 'p', 'q']
+                         'search', 'playfile', 's', 'p', 'q', 'gif']
 
         self.search_results = None
 
@@ -129,8 +130,12 @@ class MyClient(discord.Client):
             
             
     async def enqueue(self, url):
-        await self.send_msg(f'added {url} to the queue')
-        self.queue.append((url, await download_file(url)))
+        try:
+            self.queue.append((url, await download_file(url)))
+            await self.send_msg(f'added {url} to the queue')
+        except IndexError:
+            await self.send_msg("failed to download file. Try searching againg and chosing other option")
+
 
 
     async def play_link(self, url):
@@ -164,7 +169,7 @@ class MyClient(discord.Client):
             await self.command_vjoin(command)
 
         self.queue.append((filename, filename))
-
+        await self.send_msg(f'added {filename} to the queue')
         if self.vchannel is not None and not self.vchannel.is_playing():
             await self.play_from_queue()
 
@@ -277,6 +282,16 @@ class MyClient(discord.Client):
             await self.send_msg('nothing is playing')
         else:
             await self.send_msg(f'playing {self.np}')
+
+
+    async def command_gif(self, command):
+        """send random gif from tenor on query evangelion or user-provided"""
+        if command.content.lower().strip()=='>gif':
+            query = "evangelion"
+        else:
+            query = command.content.lower().strip().split(' ', 1)[-1]
+        gif_link = get_random_gif(20, query)
+        await self.send_msg(gif_link)
 
 
 
