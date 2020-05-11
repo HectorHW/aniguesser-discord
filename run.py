@@ -18,7 +18,6 @@ class MyClient(discord.Client):
         super().__init__(**options)
         self.mp3cache = options['mp3cache']
         self.guild_id = config.guild_id
-        self.rythm_channel_id = config.rythm_channel_id
         self.bot_control_channel_id = config.bot_control_channel_id
         self.admin_id = config.admin_user_id
         self.guild = None
@@ -32,7 +31,10 @@ class MyClient(discord.Client):
         self.commands = ['clear_chat', 'dump', 'die',
                          'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume', 'np',
                          'queue', 'clear', 'help',
-                         'search', 'playfile', 's', 'p', 'q', 'gif']
+                         'search', 'playfile', 's', 'p', 'q', 'gif', 'repeat', 'loopqueue']
+
+        self.repeat = False
+        self.loopqueue = False
 
         self.search_results = None
 
@@ -43,11 +45,9 @@ class MyClient(discord.Client):
         self.guild = self.get_guild(self.guild_id)
         print(f'guild is {self.guild}')
         self.bot_control_channel = self.get_channel(self.bot_control_channel_id)
-        self.rythm_channel = self.get_channel(self.rythm_channel_id)
         print(f'control channel is {self.bot_control_channel}')
         assert self.guild is not None
         assert self.bot_control_channel is not None
-        assert self.rythm_channel is not None
         print('finished loading')
 
 
@@ -198,13 +198,19 @@ class MyClient(discord.Client):
         if not self.queue:
             return
 
-        url, filename = self.queue.pop()
+        url, filename = self.queue.pop(0)
         audio = discord.FFmpegPCMAudio(filename)
         self.np = os.path.basename(filename).split(' --- ')[0]
         self.vchannel.play(audio)
         while self.vchannel.is_playing() or self.vchannel.is_paused():
             await asyncio.sleep(1)
         self.np = None
+
+        if self.repeat:
+            self.queue = [(url, filename)] + self.queue
+        elif self.loopqueue:
+            self.queue.append((url, filename))
+
         if self.queue:
             await self.play_from_queue()
 
@@ -305,8 +311,15 @@ class MyClient(discord.Client):
         gif_link = get_random_gif(20, query)
         await self.send_msg(gif_link)
 
+    async def command_repeat(self, _):
+        """makes bot repeat same track"""
+        self.repeat = not self.repeat
+        await self.send_msg(f"repeat is now set to {self.repeat}")
 
-
+    async def command_loopqueue(self, _):
+        """makes bot repeat the whole queue"""
+        self.loopqueue = not self.loopqueue
+        await self.send_msg(f"loopqueue is now set to {self.loopqueue}")
 
 
 
