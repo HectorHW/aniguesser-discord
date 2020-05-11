@@ -143,7 +143,7 @@ class MyClient(discord.Client):
         enqueue (and possibly start playing) given url
         """
         await self.enqueue(url)
-        if self.vchannel is not None and not self.vchannel.is_playing():
+        if self.vchannel is not None and not self.vchannel.is_playing() and not self.vchannel.is_paused():
             await self.play_from_queue()
 
     async def command_play(self, command): # >play <url>
@@ -170,7 +170,7 @@ class MyClient(discord.Client):
 
         self.queue.append((filename, filename))
         await self.send_msg(f'added {filename} to the queue')
-        if self.vchannel is not None and not self.vchannel.is_playing():
+        if self.vchannel is not None and not self.vchannel.is_playing() and not self.vchannel.is_paused():
             await self.play_from_queue()
 
 
@@ -190,7 +190,7 @@ class MyClient(discord.Client):
         audio = discord.FFmpegPCMAudio(filename)
         self.np = os.path.basename(filename).split(' --- ')[0]
         self.vchannel.play(audio)
-        while self.vchannel.is_playing():
+        while self.vchannel.is_playing() or self.vchannel.is_paused():
             await asyncio.sleep(1)
         self.np = None
         if self.queue:
