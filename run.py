@@ -24,7 +24,7 @@ class MyClient(discord.Client):
         self.bot_control_channel = None
         self.rythm_channel = None
         self.vchannel = None
-
+        self.id_voice = None
         self.queue = []
         self.np = None
 
@@ -124,6 +124,7 @@ class MyClient(discord.Client):
             for item in self.guild.channels:
                 if item.type==discord.ChannelType.voice and self.admin_id in list(map(lambda r: r.id, item.members)):
                     self.vchannel = await item.connect()
+                    self.id_voice = item
                     print(item)
                     return
             raise ChannelNotFoundException
@@ -132,6 +133,8 @@ class MyClient(discord.Client):
         user = command.author.id
         if user==self.admin_id and self.vchannel is not None:
             await self.vchannel.disconnect()
+            self.vchannel = None
+            self.id_voice = None
             
 
     async def enqueue(self, url):
@@ -202,7 +205,7 @@ class MyClient(discord.Client):
         audio = discord.FFmpegPCMAudio(filename)
         self.np = os.path.basename(filename).split(' --- ')[0]
         self.vchannel.play(audio)
-        while self.vchannel.is_playing() or self.vchannel.is_paused():
+        while self.vchannel is not None and self.vchannel.is_playing() or self.vchannel.is_paused():
             await asyncio.sleep(1)
         self.np = None
 
@@ -320,6 +323,17 @@ class MyClient(discord.Client):
         """makes bot repeat the whole queue"""
         self.loopqueue = not self.loopqueue
         await self.send_msg(f"loopqueue is now set to {self.loopqueue}")
+
+    async def on_voice_state_update(self, member, before, after):
+        if self.vchannel is not None:
+            if len(self.id_voice.members)<2:
+                self.loopqueue = False
+                self.repeat = False
+                self.queue.clear()
+                await self.command_stop(None)
+                await self.vchannel.disconnect()
+                self.vchannel = None
+                self.id_voice = None
 
 
 
