@@ -27,9 +27,9 @@ class MyClient(discord.Client):
         self.queue = []
         self.np = None
 
-        self.commands = ['list', 'add', 'del', 'clear', 'dump', 'die',
+        self.commands = ['clear_chat', 'dump', 'die',
                          'vjoin', 'vleave', 'play', 'skip', 'stop', 'pause', 'resume', 'np',
-                         'queue', 'clear_queue', 'help',
+                         'queue', 'clear', 'help',
                          'search', 'playfile', 's', 'p', 'q']
 
         self.search_results = None
@@ -96,7 +96,7 @@ class MyClient(discord.Client):
             await self.send_msg(attr.__doc__)
 
 
-    async def command_clear(self, command):
+    async def command_clear_chat(self, command):
         user = command.author.id
         if user==self.admin_id:
             #limited to 100 messages at once
@@ -129,8 +129,9 @@ class MyClient(discord.Client):
             
             
     async def enqueue(self, url):
-        self.queue.append((url, download_file(url)))
         await self.send_msg(f'added {url} to the queue')
+        self.queue.append((url, await download_file(url)))
+
 
     async def play_link(self, url):
         """
@@ -150,6 +151,23 @@ class MyClient(discord.Client):
         if 'youtube.com' in url or 'youtu.be' in url:
             await self.play_link(url)
 
+    async def command_playfile(self, command):
+        filename = command.content.split(' ', 1)[-1]
+
+        user = command.author.id
+        if not user==self.admin_id:
+            return
+        if filename.split('.')[-1] not in ['flac', 'mp3', 'wav']:
+            await  self.send_msg('unsupported file format')
+            return
+        if self.vchannel is None:
+            await self.command_vjoin(command)
+
+        self.queue.append((filename, filename))
+
+        if self.vchannel is not None and not self.vchannel.is_playing():
+            await self.play_from_queue()
+
 
     async def command_p(self, command):
         """
@@ -163,8 +181,7 @@ class MyClient(discord.Client):
         if not self.queue:
             return
 
-        url, awaitable_filename = self.queue.pop()
-        filename = await awaitable_filename
+        url, filename = self.queue.pop()
         audio = discord.FFmpegPCMAudio(filename)
         self.np = os.path.basename(filename).split(' --- ')[0]
         self.vchannel.play(audio)
@@ -203,9 +220,18 @@ class MyClient(discord.Client):
         display queue
         """
         if self.queue:
-            await self.send_msg(f'{list(map(lambda r: r[0], self.queue))}')
+            pretty = '\n'.join(['\n']+[f"""{i+1}. {os.path.basename(record[1]).split(" --- ")[0]}""" for i, record in enumerate(self.queue)])
+
+            await self.send_msg(pretty)
         else:
             await self.send_msg('queue is empty')
+
+    async def command_clear(self, _):
+        """
+        clears queue
+        """
+        self.queue.clear()
+        await self.send_msg('cleared queue')
 
     async def command_q(self, _):
         """short for queue"""

@@ -1,9 +1,15 @@
 import subprocess
 import json
+import asyncio
 async def download_file(url):
     print(f"downloading {url}")
-    process = subprocess.Popen(['youtube-dl', '--extract-audio', '--audio-format', 'mp3', "-o", "tmpdir/%(title)s --- %(id)s.%(ext)s", url], stdout=subprocess.PIPE)
-    out, err = process.communicate()
+    process = await asyncio.create_subprocess_shell(f'youtube-dl --extract-audio --audio-format mp3 -o tmpdir/%\(title\)s\ ---\ %\(id\)s.%\(ext\)s {url}',
+                                              stdout=asyncio.subprocess.PIPE)
+    #process = subprocess.Popen(['youtube-dl', '--extract-audio', '--audio-format', 'mp3', "-o", "tmpdir/%(title)s --- %(id)s.%(ext)s", url], stdout=subprocess.PIPE)
+
+    await process.wait()
+    out, err = await process.communicate()
+    print(out)
     out = out.decode("utf-8")
     res = list(filter(lambda r: '[ffmpeg] Destination: ' in r, out.split('\n')))[0]
     res = res.split(' ', 2)[-1]
